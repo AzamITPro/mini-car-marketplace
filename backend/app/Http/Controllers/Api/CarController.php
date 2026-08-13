@@ -47,10 +47,9 @@ class CarController extends Controller
     /**
      * Store a newly created car in storage.
      */
-    public function store(Request $request)
+ public function store(Request $request)
     {
         $validatedData = $request->validate([
-            'user_id'          => 'required|exists:users,id',
             'brand'            => 'required|string|max:255',
             'model'            => 'required|string|max:255',
             'year'             => 'required|integer|min:1900|max:' . (date('Y') + 1),
@@ -61,12 +60,15 @@ class CarController extends Controller
             'condition'        => 'required|in:new,used',
         ]);
 
+        // تحديد مالك السيارة تلقائياً من صاحب الـ Token المسجل دخوله
+        $validatedData['user_id'] = $request->user()->id;
+
         $car = Car::create($validatedData);
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'تمت إضافة السيارة بنجاح',
-            'data' => $car
+            'data'    => $car
         ], 201);
     }
 
