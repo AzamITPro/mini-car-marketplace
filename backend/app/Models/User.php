@@ -53,4 +53,11 @@ class User extends Authenticatable
     {
         return $this->hasMany(Car::class);
     }
+    /**
+     * The cars that the user has favorited.
+     */
+    public function favoriteCars()
+    {
+        return $this->belongsToMany(Car::class, 'favorites')->withTimestamps();
+    }
 }

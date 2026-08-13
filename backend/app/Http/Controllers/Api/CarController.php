@@ -11,16 +11,48 @@ class CarController extends Controller
     /**
      * Display a listing of all available cars.
      */
-    public function index()
+    /**
+     * Display a listing of cars with search and filtering.
+     */
+    public function index(Request $request)
     {
-        $cars = Car::with('user:id,name,email')
-            ->where('is_available', true)
-            ->latest()
-            ->get();
+        $query = Car::with('user:id,name,email')->where('is_available', true);
+
+        // 1. البحث النصي الفوري (في الشركة، الموديل، المدينة، والوصف)
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('brand', 'ilike', "%{$search}%")
+                  ->orWhere('model', 'ilike', "%{$search}%")
+                  ->orWhere('city', 'ilike', "%{$search}%")
+                  ->orWhere('description', 'ilike', "%{$search}%");
+            });
+        }
+
+        // 2. التصفية حسب نوع المعاملة (بيع / تأجير)
+        if ($request->filled('transaction_type')) {
+            $query->where('transaction_type', $request->transaction_type);
+        }
+
+        // 3. التصفية حسب حالة السيارة (جديدة / مستعملة)
+        if ($request->filled('condition')) {
+            $query->where('condition', $request->condition);
+        }
+
+        // 4. التصفية حسب نطاق السعر (الأدنى والأقصى)
+        if ($request->filled('min_price')) {
+            $query->where('price', '>=', $request->min_price);
+        }
+
+        if ($request->filled('max_price')) {
+            $query->where('price', '<=', $request->max_price);
+        }
+
+        $cars = $query->latest()->get();
 
         return response()->json([
             'status' => true,
-            'data' => $cars
+            'data'   => $cars
         ], 200);
     }
 
