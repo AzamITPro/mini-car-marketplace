@@ -19,6 +19,12 @@ class Car extends Model
         'description',
         'city',
         'condition',
+        'mileage',
+        'transmission',
+        'fuel_type',
+        'engine_power',
+        'body_type',
+        'status',
         'image_url',
         'is_available',
     ];
@@ -32,12 +38,9 @@ class Car extends Model
     {
         return $this->belongsToMany(User::class, 'favorites')->withTimestamps();
     }
-    /**
-     * The rental records for this car.
-     */
+
     public function rentals()
     {
         return $this->hasMany(Rental::class);
     }
 }
-

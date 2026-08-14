@@ -10,20 +10,29 @@ use Illuminate\Support\Facades\Hash;
 class AuthController extends Controller
 {
     /**
-     * Register a new user.
+     * Register a new user with specific role.
      */
     public function register(Request $request)
     {
         $validatedData = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
+            'name'          => 'required|string|max:255',
+            'email'         => 'required|string|email|max:255|unique:users',
+            'password'      => 'required|string|min:8',
+            'role'          => 'nullable|in:user,dealer,rental_agency',
+            'phone'         => 'nullable|string|max:50',
+            'showroom_name' => 'nullable|string|max:255',
+            'city'          => 'nullable|string|max:100',
         ]);
 
         $user = User::create([
-            'name'     => $validatedData['name'],
-            'email'    => $validatedData['email'],
-            'password' => Hash::make($validatedData['password']),
+            'name'          => $validatedData['name'],
+            'email'         => $validatedData['email'],
+            'password'      => Hash::make($validatedData['password']),
+            'role'          => $validatedData['role'] ?? 'user',
+            'phone'         => $validatedData['phone'] ?? null,
+            'showroom_name' => $validatedData['showroom_name'] ?? null,
+            'city'          => $validatedData['city'] ?? null,
+            'is_verified'   => false,
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -68,7 +77,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Logout user (Revoke token).
+     * Logout user.
      */
     public function logout(Request $request)
     {
