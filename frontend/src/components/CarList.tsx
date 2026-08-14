@@ -648,6 +648,23 @@ export const CarList = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span style={{ fontSize: '1.3em', fontWeight: 'bold', color: '#28a745' }}>${car.price} {car.transaction_type === 'rent' && <small style={{ fontSize: '0.6em', color: '#666' }}>/ يوم</small>}</span>
                     <span style={{ fontSize: '0.85em', color: '#666' }}>سنة {car.year}</span>
+                    {car.price_rating && (
+                      <span
+                         style={{
+                          backgroundColor: car.price_rating.bg,
+                          color: car.price_rating.color,
+                          padding: '3px 8px',
+                          borderRadius: '20px',
+                          fontSize: '0.78em',
+                          fontWeight: 'bold',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          }}
+    > 
+      {car.price_rating.icon} {car.price_rating.label}
+    </span>
+  )}
                   </div>
 
                   {/* شبكة المواصفات السريعة بأسلوب mobile.de */}

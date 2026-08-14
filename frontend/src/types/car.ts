@@ -9,6 +9,14 @@ export interface User {
   is_verified?: boolean;
 }
 
+export interface PriceRating {
+  badge: 'great' | 'fair' | 'high';
+  label: string;
+  color: string;
+  bg: string;
+  icon: string;
+}
+
 export interface Car {
   id: number;
   user_id: number;
@@ -28,6 +36,7 @@ export interface Car {
   status?: 'active' | 'sold' | 'reserved';
   image_url?: string;
   is_available: boolean;
+  price_rating?: PriceRating;
   user?: User;
   created_at?: string;
   updated_at?: string;
