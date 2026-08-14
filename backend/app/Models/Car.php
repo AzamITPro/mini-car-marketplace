@@ -32,5 +32,12 @@ class Car extends Model
     {
         return $this->belongsToMany(User::class, 'favorites')->withTimestamps();
     }
+    /**
+     * The rental records for this car.
+     */
+    public function rentals()
+    {
+        return $this->hasMany(Rental::class);
+    }
 }
 

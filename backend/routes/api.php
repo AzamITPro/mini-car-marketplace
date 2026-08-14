@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CarController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\RentalController;
 
 /*
 |--------------------------------------------------------------------------
@@ -12,7 +13,7 @@ use App\Http\Controllers\Api\FavoriteController;
 |--------------------------------------------------------------------------
 */
 
-// 1. المسارات العامة (متاحة للجميع)
+// 1. المسارات العامة
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -31,4 +32,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // مسارات المفضلة
     Route::get('/favorites', [FavoriteController::class, 'index']);
     Route::post('/favorites/toggle/{carId}', [FavoriteController::class, 'toggle']);
+
+    // مسارات التأجير والحجوزات
+    Route::get('/rentals', [RentalController::class, 'index']);
+    Route::post('/rentals', [RentalController::class, 'store']);
+    Route::post('/rentals/{id}/cancel', [RentalController::class, 'cancel']);
 });

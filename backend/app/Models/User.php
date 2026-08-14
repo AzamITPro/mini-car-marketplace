@@ -60,4 +60,11 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(Car::class, 'favorites')->withTimestamps();
     }
+    /**
+     * The rentals booked by this user.
+     */
+    public function rentals()
+    {
+        return $this->hasMany(Rental::class);
+    }
 }
