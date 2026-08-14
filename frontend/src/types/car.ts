@@ -15,6 +15,7 @@ export interface Car {
   description?: string;
   city: string;
   condition: 'new' | 'used';
+  image_url?: string;
   is_available: boolean;
   user?: User;
   created_at?: string;

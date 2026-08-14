@@ -5,12 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Car;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class CarController extends Controller
 {
-    /**
-     * Display a listing of all available cars.
-     */
     /**
      * Display a listing of cars with search and filtering.
      */
@@ -18,7 +16,6 @@ class CarController extends Controller
     {
         $query = Car::with('user:id,name,email')->where('is_available', true);
 
-        // 1. البحث النصي الفوري (في الشركة، الموديل، المدينة، والوصف)
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -29,17 +26,14 @@ class CarController extends Controller
             });
         }
 
-        // 2. التصفية حسب نوع المعاملة (بيع / تأجير)
         if ($request->filled('transaction_type')) {
             $query->where('transaction_type', $request->transaction_type);
         }
 
-        // 3. التصفية حسب حالة السيارة (جديدة / مستعملة)
         if ($request->filled('condition')) {
             $query->where('condition', $request->condition);
         }
 
-        // 4. التصفية حسب نطاق السعر (الأدنى والأقصى)
         if ($request->filled('min_price')) {
             $query->where('price', '>=', $request->min_price);
         }
@@ -65,21 +59,21 @@ class CarController extends Controller
 
         if (!$car) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'السيارة غير موجودة'
             ], 404);
         }
 
         return response()->json([
             'status' => true,
-            'data' => $car
+            'data'   => $car
         ], 200);
     }
 
     /**
-     * Store a newly created car in storage.
+     * Store a newly created car with optional image upload.
      */
- public function store(Request $request)
+    public function store(Request $request)
     {
         $validatedData = $request->validate([
             'brand'            => 'required|string|max:255',
@@ -90,10 +84,16 @@ class CarController extends Controller
             'description'      => 'nullable|string',
             'city'             => 'required|string|max:255',
             'condition'        => 'required|in:new,used',
+            'image'            => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
         ]);
 
-        // تحديد مالك السيارة تلقائياً من صاحب الـ Token المسجل دخوله
         $validatedData['user_id'] = $request->user()->id;
+
+        // معالجة وحفظ ملف الصورة إن تم إرفاقه
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store('cars', 'public');
+            $validatedData['image_url'] = '/storage/' . $imagePath;
+        }
 
         $car = Car::create($validatedData);
 
@@ -105,7 +105,7 @@ class CarController extends Controller
     }
 
     /**
-     * Update the specified car in storage.
+     * Update the specified car.
      */
     public function update(Request $request, $id)
     {
@@ -113,7 +113,7 @@ class CarController extends Controller
 
         if (!$car) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'السيارة غير موجودة'
             ], 404);
         }
@@ -128,19 +128,30 @@ class CarController extends Controller
             'city'             => 'sometimes|string|max:255',
             'condition'        => 'sometimes|in:new,used',
             'is_available'     => 'sometimes|boolean',
+            'image'            => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
         ]);
+
+        if ($request->hasFile('image')) {
+            // حذف الصورة القديمة لتوفير المساحة
+            if ($car->image_url) {
+                $oldPath = str_replace('/storage/', '', $car->image_url);
+                Storage::disk('public')->delete($oldPath);
+            }
+            $imagePath = $request->file('image')->store('cars', 'public');
+            $validatedData['image_url'] = '/storage/' . $imagePath;
+        }
 
         $car->update($validatedData);
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'تم تعديل بيانات السيارة بنجاح',
-            'data' => $car
+            'data'    => $car
         ], 200);
     }
 
     /**
-     * Remove the specified car from storage.
+     * Remove the specified car.
      */
     public function destroy($id)
     {
@@ -148,15 +159,21 @@ class CarController extends Controller
 
         if (!$car) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'السيارة غير موجودة'
             ], 404);
+        }
+
+        // حذف الصورة المرتبطة قبل حذف السجل من قاعدة البيانات
+        if ($car->image_url) {
+            $oldPath = str_replace('/storage/', '', $car->image_url);
+            Storage::disk('public')->delete($oldPath);
         }
 
         $car->delete();
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'تم حذف السيارة بنجاح'
         ], 200);
     }

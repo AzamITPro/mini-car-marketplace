@@ -19,6 +19,7 @@ class Car extends Model
         'description',
         'city',
         'condition',
+        'image_url',
         'is_available',
     ];
 
@@ -26,11 +27,10 @@ class Car extends Model
     {
         return $this->belongsTo(User::class);
     }
-    /**
-     * The users that have favorited this car.
-     */
+
     public function favoritedBy()
     {
         return $this->belongsToMany(User::class, 'favorites')->withTimestamps();
     }
 }
+
