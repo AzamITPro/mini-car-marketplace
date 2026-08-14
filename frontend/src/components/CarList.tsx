@@ -16,6 +16,9 @@ export const CarList = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // مفتاح تحديث البيانات
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+
   // حالة المستخدم
   const [token, setToken] = useState<string | null>(localStorage.getItem('auth_token'));
   const [user, setUser] = useState<User | null>(
@@ -44,6 +47,11 @@ export const CarList = () => {
   const [rentalEnd, setRentalEnd] = useState<string>('');
   const [bookingLoading, setBookingLoading] = useState<boolean>(false);
 
+  // التقييمات
+  const [reviewRating, setReviewRating] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState<string>('');
+  const [reviewSubmitting, setReviewSubmitting] = useState<boolean>(false);
+
   // نموذج الإضافة والتعديل
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [editingCarId, setEditingCarId] = useState<number | null>(null);
@@ -64,89 +72,83 @@ export const CarList = () => {
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   // 1. جلب بيانات السوق
-  const fetchCars = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get('/cars', {
-        params: {
-          search: search || undefined,
-          transaction_type: transactionType || undefined,
-          condition: condition || undefined,
-          transmission: transmission || undefined,
-          fuel_type: fuelType || undefined,
-          body_type: bodyType || undefined,
-          seller_type: sellerType || undefined,
-        },
-      });
-      setCars(response.data.data);
-    } catch (err) {
-      console.error(err);
-      setError('تعذر الاتصال بالخادم لجلب قائمة السيارات');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isMounted = true;
+
+    const loadCars = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await api.get('/cars', {
+          params: {
+            search: search || undefined,
+            transaction_type: transactionType || undefined,
+            condition: condition || undefined,
+            transmission: transmission || undefined,
+            fuel_type: fuelType || undefined,
+            body_type: bodyType || undefined,
+            seller_type: sellerType || undefined,
+          },
+        });
+        if (isMounted) {
+          setCars(response.data.data);
+        }
+      } catch (err) {
+        console.error(err);
+        if (isMounted) {
+          setError('تعذر الاتصال بالخادم لجلب قائمة السيارات');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
     const timer = setTimeout(() => {
-      fetchCars();
+      void loadCars();
     }, 300);
-    return () => clearTimeout(timer);
-  }, [search, transactionType, condition, transmission, fuelType, bodyType, sellerType]);
 
-  // 2. جلب المفضلة
-  const fetchFavorites = async () => {
-    if (!token) return;
-    try {
-      const response = await api.get('/favorites', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const favCars: Car[] = response.data.data;
-      setFavoriteCars(favCars);
-      setFavoriteIds(favCars.map((c) => c.id));
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [search, transactionType, condition, transmission, fuelType, bodyType, sellerType, refreshTrigger]);
 
-  // 3. جلب سياراتي
-  const fetchMyCars = async () => {
-    if (!token) return;
-    try {
-      const response = await api.get('/my-cars', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMyCars(response.data.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // 4. جلب حجوزاتي
-  const fetchMyRentals = async () => {
-    if (!token) return;
-    try {
-      const response = await api.get('/rentals', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMyRentals(response.data.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
+  // 2. جلب المفضلة وسيارتي وحجوزاتي بطريقة غير متزامنة آمنة
   useEffect(() => {
-    if (token) {
-      fetchFavorites();
-      fetchMyCars();
-      fetchMyRentals();
-    } else {
-      setFavoriteIds([]);
-      setFavoriteCars([]);
-      setMyCars([]);
-      setMyRentals([]);
+    let isMounted = true;
+
+    if (!token) {
+      return;
     }
-  }, [token]);
+
+    const loadUserData = async () => {
+      try {
+        const [favRes, myCarsRes, rentalsRes] = await Promise.all([
+          api.get('/favorites', { headers: { Authorization: `Bearer ${token}` } }),
+          api.get('/my-cars', { headers: { Authorization: `Bearer ${token}` } }),
+          api.get('/rentals', { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+
+        if (isMounted) {
+          const favs: Car[] = favRes.data.data;
+          setFavoriteCars(favs);
+          setFavoriteIds(favs.map((c) => c.id));
+          setMyCars(myCarsRes.data.data);
+          setMyRentals(rentalsRes.data.data);
+        }
+      } catch (err) {
+        console.error('Error loading user data:', err);
+      }
+    };
+
+    void loadUserData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token, refreshTrigger]);
 
   // تسجيل الدخول
   const handleLogin = async (e: React.FormEvent) => {
@@ -160,6 +162,7 @@ export const CarList = () => {
       setUser(currentUser);
       localStorage.setItem('auth_token', newToken);
       localStorage.setItem('user_info', JSON.stringify(currentUser));
+      setRefreshTrigger((prev) => prev + 1);
       alert(`أهلاً بك يا ${currentUser.name}! 🎉`);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -188,6 +191,7 @@ export const CarList = () => {
       localStorage.setItem('auth_token', newToken);
       localStorage.setItem('user_info', JSON.stringify(currentUser));
       setRegisterMode(false);
+      setRefreshTrigger((prev) => prev + 1);
       alert('تم إنشاء الحساب بنجاح! 🎉');
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -207,6 +211,10 @@ export const CarList = () => {
     } finally {
       setToken(null);
       setUser(null);
+      setFavoriteCars([]);
+      setFavoriteIds([]);
+      setMyCars([]);
+      setMyRentals([]);
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_info');
       setActiveTab('market');
@@ -233,7 +241,7 @@ export const CarList = () => {
       } else {
         setFavoriteIds((prev) => prev.filter((id) => id !== carId));
       }
-      fetchFavorites();
+      setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         alert(err.response?.data?.message || err.message);
@@ -268,14 +276,12 @@ export const CarList = () => {
 
     try {
       if (editingCarId) {
-        // تعديل سيارة
         formData.append('_method', 'PUT');
         await api.post(`/cars/${editingCarId}`, formData, {
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
         });
         alert('تم تعديل بيانات السيارة بنجاح! ✏️');
       } else {
-        // إضافة سيارة جديدة
         await api.post('/cars', formData, {
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
         });
@@ -283,8 +289,7 @@ export const CarList = () => {
       }
       setShowAddModal(false);
       setEditingCarId(null);
-      fetchCars();
-      fetchMyCars();
+      setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         alert(err.response?.data?.message || 'حدث خطأ أثناء حفظ السيارة');
@@ -324,8 +329,7 @@ export const CarList = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       alert('تم حذف السيارة بنجاح 🗑️');
-      fetchCars();
-      fetchMyCars();
+      setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         alert(err.response?.data?.message || 'فشل حذف السيارة');
@@ -357,7 +361,7 @@ export const CarList = () => {
       );
       alert(response.data.message);
       setSelectedCar(null);
-      fetchMyRentals();
+      setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         alert(err.response?.data?.message || 'تعذر حجز السيارة');
@@ -377,11 +381,41 @@ export const CarList = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       alert('تم إلغاء الحجز بنجاح');
-      fetchMyRentals();
+      setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         alert(err.response?.data?.message || 'فشل إلغاء الحجز');
       }
+    }
+  };
+
+  // تقييم المعرض
+  const handleAddReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) {
+      alert('يرجى تسجيل الدخول أولاً لإرسال تقييمك');
+      return;
+    }
+    if (!selectedCar || !selectedCar.user) return;
+
+    setReviewSubmitting(true);
+    try {
+      const res = await api.post('/reviews', {
+        dealer_id: selectedCar.user_id,
+        car_id: selectedCar.id,
+        rating: reviewRating,
+        comment: reviewComment,
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert(res.data.message);
+      setReviewComment('');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        alert(err.response?.data?.message || 'فشل تسجيل التقييم');
+      }
+    } finally {
+      setReviewSubmitting(false);
     }
   };
 
@@ -486,7 +520,7 @@ export const CarList = () => {
         )}
       </div>
 
-      {/* 3. شريط الفلاتر المتقدمة (فقط في السوق العام) */}
+      {/* 3. شريط الفلاتر المتقدمة */}
       {activeTab === 'market' && (
         <div style={{ backgroundColor: '#fff', padding: '16px', borderRadius: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)', marginBottom: '25px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
@@ -512,6 +546,14 @@ export const CarList = () => {
               <option value="diesel">ديزل 🛢️</option>
               <option value="hybrid">هايبرد 🔋</option>
               <option value="electric">كهربائي ⚡</option>
+            </select>
+            <select value={bodyType} onChange={(e) => setBodyType(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}>
+              <option value="">نوع الهيكل (الكل)</option>
+              <option value="sedan">سيدان</option>
+              <option value="suv">SUV</option>
+              <option value="hatchback">هاتشباك</option>
+              <option value="coupe">كوبيه</option>
+              <option value="truck">بيك آب</option>
             </select>
             <select value={sellerType} onChange={(e) => setSellerType(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}>
               <option value="">نوع البائع (الكل)</option>
@@ -547,6 +589,10 @@ export const CarList = () => {
           </form>
         </div>
       )}
+
+      {/* مؤشر التحميل والأخطاء */}
+      {loading && <div style={{ textAlign: 'center', padding: '15px', fontSize: '1.1em' }}>جاري تحميل السيارات... 🚗</div>}
+      {error && <div style={{ color: 'red', textAlign: 'center', padding: '10px' }}>{error}</div>}
 
       {/* 5. عرض محتوى التبويب النشط */}
       {activeTab === 'rentals' ? (
@@ -686,6 +732,39 @@ export const CarList = () => {
                     </a>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* نموذج إضافة تقييم بالنجوم */}
+            {user && user.id !== selectedCar.user_id && (
+              <div style={{ backgroundColor: '#fff3cd', padding: '14px', borderRadius: '8px', marginBottom: '15px' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>⭐ تقييم هذا البائع / المعرض:</h4>
+                <form onSubmit={handleAddReview} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <label>درجة التقييم:</label>
+                    <select value={reviewRating} onChange={(e) => setReviewRating(Number(e.target.value))} style={{ padding: '4px 8px', borderRadius: '4px' }}>
+                      <option value={5}>⭐⭐⭐⭐⭐ (5 من 5 ممتاز جداً)</option>
+                      <option value={4}>⭐⭐⭐⭐ (4 من 5 جيد جداً)</option>
+                      <option value={3}>⭐⭐⭐ (3 من 5 جيد)</option>
+                      <option value={2}>⭐⭐ (2 من 5 مقبول)</option>
+                      <option value={1}>⭐ (1 من 5 ضعيف)</option>
+                    </select>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="اكتب رأيك وتجربتك مع المعرض (اختياري)..."
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc' }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={reviewSubmitting}
+                    style={{ alignSelf: 'flex-start', backgroundColor: '#ffc107', color: '#000', border: 'none', padding: '6px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    {reviewSubmitting ? 'جاري الإرسال...' : 'إرسال التقييم ⭐'}
+                  </button>
+                </form>
               </div>
             )}
 

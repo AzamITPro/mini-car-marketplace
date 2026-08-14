@@ -50,4 +50,11 @@ class User extends Authenticatable
     {
         return $this->hasMany(Rental::class);
     }
+    /**
+     * Reviews received by this dealer/seller.
+     */
+    public function receivedReviews()
+    {
+        return $this->hasMany(Review::class, 'dealer_id');
+    }
 }
