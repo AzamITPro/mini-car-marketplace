@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  # 1. حاوية قاعدة بيانات PostgreSQL
+  db:
+    image: postgres:16
+    container_name: car_marketplace_db
+    restart: always
+    environment:
+      POSTGRES_DB: mini_car_marketplace
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: rootpassword
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. حاوية خادم Laravel Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: car_marketplace_backend
+    restart: always
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db # اسم حاوية قاعدة البيانات داخل الشبكة الافتراضية
+      DB_PORT: 5432
+      DB_DATABASE: mini_car_marketplace
+      DB_USERNAME: postgres
+      DB_PASSWORD: rootpassword
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/var/www
+
+volumes:
+  postgres_data:
