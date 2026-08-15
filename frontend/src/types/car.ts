@@ -22,6 +22,7 @@ export interface Car {
   user_id: number;
   brand: string;
   model: string;
+  vin?: string;
   year: number;
   price: number;
   transaction_type: 'sale' | 'rent';
@@ -29,10 +30,16 @@ export interface Car {
   city: string;
   condition: 'new' | 'used';
   mileage?: number;
+  owners_count?: number;
+  is_accident_free?: boolean;
+  has_service_history?: boolean;
+  warranty_months?: number;
+  tuv_valid_until?: string;
   transmission?: 'automatic' | 'manual';
   fuel_type?: 'petrol' | 'diesel' | 'hybrid' | 'electric';
   engine_power?: number;
   body_type?: 'suv' | 'sedan' | 'hatchback' | 'coupe' | 'truck' | 'van';
+  features?: string[];
   status?: 'active' | 'sold' | 'reserved';
   image_url?: string;
   is_available: boolean;
@@ -65,6 +72,20 @@ export interface ReviewItem {
     id: number;
     name: string;
   };
+}
+
+export interface DealerVerification {
+  id: number;
+  user_id: number;
+  commercial_record: string;
+  license_document: string;
+  national_id_document: string;
+  showroom_address: string;
+  showroom_photo?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  admin_notes?: string;
+  user?: User;
+  created_at?: string;
 }
 
 export interface Dealer {
