@@ -16,7 +16,11 @@ export const CarList = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // مفتاح تحديث البيانات
+  // قائمة المقارنة (بحد أقصى 3 سيارات)
+  const [compareCars, setCompareCars] = useState<Car[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState<boolean>(false);
+
+  // مفتاح التحديث
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   // حالة المستخدم
@@ -115,13 +119,10 @@ export const CarList = () => {
     };
   }, [search, transactionType, condition, transmission, fuelType, bodyType, sellerType, refreshTrigger]);
 
-  // 2. جلب المفضلة وسيارتي وحجوزاتي بطريقة غير متزامنة آمنة
+  // 2. جلب بيانات المستخدم
   useEffect(() => {
     let isMounted = true;
-
-    if (!token) {
-      return;
-    }
+    if (!token) return;
 
     const loadUserData = async () => {
       try {
@@ -171,7 +172,7 @@ export const CarList = () => {
     }
   };
 
-  // إنشاء حساب جديد
+  // تسجيل حساب جديد
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -215,6 +216,7 @@ export const CarList = () => {
       setFavoriteIds([]);
       setMyCars([]);
       setMyRentals([]);
+      setCompareCars([]);
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_info');
       setActiveTab('market');
@@ -246,6 +248,19 @@ export const CarList = () => {
       if (axios.isAxiosError(err)) {
         alert(err.response?.data?.message || err.message);
       }
+    }
+  };
+
+  // تبديل إضافة/إزالة سيارة من المقارنة
+  const toggleCompare = (car: Car) => {
+    if (compareCars.some((c) => c.id === car.id)) {
+      setCompareCars((prev) => prev.filter((c) => c.id !== car.id));
+    } else {
+      if (compareCars.length >= 3) {
+        alert('يمكنك مقارنة 3 سيارات كحد أقصى في نفس الوقت');
+        return;
+      }
+      setCompareCars((prev) => [...prev, car]);
     }
   };
 
@@ -299,7 +314,6 @@ export const CarList = () => {
     }
   };
 
-  // بدء تعديل سيارة
   const startEditCar = (car: Car) => {
     setEditingCarId(car.id);
     setNewBrand(car.brand);
@@ -319,7 +333,6 @@ export const CarList = () => {
     setShowAddModal(true);
   };
 
-  // حذف سيارة
   const handleDeleteCar = async (carId: number) => {
     if (!token) return;
     if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذا الإعلان نهائياً؟')) return;
@@ -337,7 +350,6 @@ export const CarList = () => {
     }
   };
 
-  // حجز سيارة للتأجير
   const handleBookCar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) {
@@ -371,7 +383,6 @@ export const CarList = () => {
     }
   };
 
-  // إلغاء حجز
   const handleCancelRental = async (rentalId: number) => {
     if (!token) return;
     if (!window.confirm('هل تريد بالتأكيد إلغاء هذا الحجز؟')) return;
@@ -389,7 +400,6 @@ export const CarList = () => {
     }
   };
 
-  // تقييم المعرض
   const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) {
@@ -433,7 +443,7 @@ export const CarList = () => {
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1100px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+    <div style={{ padding: '20px', maxWidth: '1150px', margin: '0 auto', fontFamily: 'sans-serif', paddingBottom: '90px' }}>
       
       {/* 1. الشريط العلوي وإدارة الحساب */}
       <div style={{ backgroundColor: '#fff', padding: '15px 20px', borderRadius: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)', marginBottom: '20px' }}>
@@ -591,7 +601,7 @@ export const CarList = () => {
       )}
 
       {/* مؤشر التحميل والأخطاء */}
-      {loading && <div style={{ textAlign: 'center', padding: '15px', fontSize: '1.1em' }}>جاري تحميل السيارات... 🚗</div>}
+      {loading && <div style={{ textAlign: 'center', padding: '15px', fontSize: '1.1em' }}>جاري تحديث السيارات... 🚗</div>}
       {error && <div style={{ color: 'red', textAlign: 'center', padding: '10px' }}>{error}</div>}
 
       {/* 5. عرض محتوى التبويب النشط */}
@@ -620,6 +630,7 @@ export const CarList = () => {
           {(activeTab === 'myCars' ? myCars : activeTab === 'favorites' ? favoriteCars : cars).map((car) => {
             const isFav = favoriteIds.includes(car.id);
             const isOwner = user && user.id === car.user_id;
+            const isCompared = compareCars.some((c) => c.id === car.id);
 
             return (
               <div key={car.id} style={{ border: '1px solid #ddd', borderRadius: '12px', padding: '14px', backgroundColor: '#fff', boxShadow: '0 3px 8px rgba(0,0,0,0.06)', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -646,11 +657,12 @@ export const CarList = () => {
 
                   <h3 style={{ margin: '0 0 6px 0', color: '#1a73e8' }}>{car.brand} - {car.model}</h3>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '1.3em', fontWeight: 'bold', color: '#28a745' }}>${car.price} {car.transaction_type === 'rent' && <small style={{ fontSize: '0.6em', color: '#666' }}>/ يوم</small>}</span>
-                    <span style={{ fontSize: '0.85em', color: '#666' }}>سنة {car.year}</span>
+                    <span style={{ fontSize: '1.3em', fontWeight: 'bold', color: '#28a745' }}>
+                      ${car.price} {car.transaction_type === 'rent' && <small style={{ fontSize: '0.6em', color: '#666' }}>/ يوم</small>}
+                    </span>
                     {car.price_rating && (
                       <span
-                         style={{
+                        style={{
                           backgroundColor: car.price_rating.bg,
                           color: car.price_rating.color,
                           padding: '3px 8px',
@@ -660,11 +672,11 @@ export const CarList = () => {
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '4px',
-                          }}
-    > 
-      {car.price_rating.icon} {car.price_rating.label}
-    </span>
-  )}
+                        }}
+                      >
+                        {car.price_rating.icon} {car.price_rating.label}
+                      </span>
+                    )}
                   </div>
 
                   {/* شبكة المواصفات السريعة بأسلوب mobile.de */}
@@ -677,7 +689,7 @@ export const CarList = () => {
                 </div>
 
                 {/* أزرار الإجراءات */}
-                <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
                   <button
                     onClick={() => setSelectedCar(car)}
                     style={{ flex: 1, backgroundColor: '#007bff', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
@@ -685,7 +697,23 @@ export const CarList = () => {
                     عرض التفاصيل 🔍
                   </button>
 
-                  {/* أزرار المالك (تعديل وحذف) */}
+                  <button
+                    onClick={() => toggleCompare(car)}
+                    style={{
+                      backgroundColor: isCompared ? '#e8f5e9' : '#f8f9fa',
+                      color: isCompared ? '#2e7d32' : '#555',
+                      border: isCompared ? '1px solid #4caf50' : '1px solid #ccc',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: isCompared ? 'bold' : 'normal',
+                    }}
+                    title="إضافة للمقارنة"
+                  >
+                    {isCompared ? '✓ مقارنة' : '⚖️ مقارنة'}
+                  </button>
+
+                  {/* أزرار المالك */}
                   {isOwner && (
                     <>
                       <button onClick={() => startEditCar(car)} style={{ backgroundColor: '#ffc107', border: 'none', padding: '8px 10px', borderRadius: '6px', cursor: 'pointer' }} title="تعديل">✏️</button>
@@ -699,7 +727,150 @@ export const CarList = () => {
         </div>
       )}
 
-      {/* 6. نافذة تفاصيل السيارة المنبثقة الكاملة (Car Details Modal) */}
+      {/* 6. شريط المقارنة العائم في أسفل الشاشة (Floating Comparison Bar) */}
+      {compareCars.length > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: '#1e293b',
+            color: '#fff',
+            padding: '12px 24px',
+            borderRadius: '50px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '15px',
+            zIndex: 900,
+          }}
+        >
+          <span>⚖️ تم تحديد <strong>{compareCars.length}</strong> سيارات للمقارنة</span>
+          <button
+            onClick={() => setShowCompareModal(true)}
+            style={{
+              backgroundColor: '#10b981',
+              color: '#fff',
+              border: 'none',
+              padding: '8px 18px',
+              borderRadius: '25px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            فتح جدول المقارنة 📊
+          </button>
+          <button
+            onClick={() => setCompareCars([])}
+            style={{
+              backgroundColor: 'transparent',
+              color: '#94a3b8',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '1.2em',
+            }}
+            title="تفريغ المقارنة"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* 7. نافذة جدول المقارنة جنباً إلى جنب (Side-by-Side Comparison Modal) */}
+      {showCompareModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '15px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '14px', maxWidth: '900px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
+            <button onClick={() => setShowCompareModal(false)} style={{ position: 'absolute', top: '15px', left: '15px', background: '#eee', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', fontSize: '1.1em' }}>✕</button>
+
+            <h2 style={{ color: '#1a73e8', marginTop: 0, textAlign: 'center' }}>⚖️ جدول مقارنة السيارات (Vergleich)</h2>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '15px', textAlign: 'right' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                    <th style={{ padding: '12px', width: '22%' }}>المواصفة</th>
+                    {compareCars.map((car) => (
+                      <th key={car.id} style={{ padding: '12px', textAlign: 'center' }}>
+                        {car.image_url && <img src={`http://127.0.0.1:8000${car.image_url}`} alt={car.model} style={{ width: '100px', height: '65px', objectFit: 'cover', borderRadius: '6px', display: 'block', margin: '0 auto 6px auto' }} />}
+                        <div style={{ fontWeight: 'bold', color: '#1a73e8' }}>{car.brand} - {car.model}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>السعر</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#16a34a', fontSize: '1.1em' }}>${car.price}</td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #eee', backgroundColor: '#fbfcfd' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>تقييم السعر</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>
+                        {car.price_rating ? <span style={{ color: car.price_rating.color, fontWeight: 'bold' }}>{car.price_rating.icon} {car.price_rating.label}</span> : 'سعر عادل'}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>سنة الصنع</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>{car.year}</td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #eee', backgroundColor: '#fbfcfd' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>العداد بالكيلومترات</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>{car.mileage ? `${car.mileage.toLocaleString()} كم` : '0 كم (جديدة)'}</td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>ناقل الحركة (القير)</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>{car.transmission === 'automatic' ? 'أوتوماتيك ⚙️' : 'عادي 🕹️'}</td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #eee', backgroundColor: '#fbfcfd' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>نوع الوقود</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>{car.fuel_type || 'بنزين'}</td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>قوة المحرك</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>{car.engine_power ? `${car.engine_power} HP` : 'غير محدد'}</td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #eee', backgroundColor: '#fbfcfd' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>نوع الهيكل</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>{car.body_type || 'سيدان'}</td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>المدينة</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>{car.city}</td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>البائع</td>
+                    {compareCars.map((car) => (
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>
+                        {car.user?.showroom_name || car.user?.name}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. نافذة تفاصيل السيارة المنبثقة الكاملة */}
       {selectedCar && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '14px', maxWidth: '750px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
