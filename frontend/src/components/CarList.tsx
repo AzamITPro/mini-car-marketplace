@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import api from '../services/api';
-import type { Car, User, Rental } from '../types/car';
+import type { Car, User, Rental, Dealer } from '../types/car';
 
 export const CarList = () => {
   // التبويب النشط
-  const [activeTab, setActiveTab] = useState<'market' | 'myCars' | 'favorites' | 'rentals'>('market');
+  const [activeTab, setActiveTab] = useState<'market' | 'dealers' | 'myCars' | 'favorites' | 'rentals'>('market');
 
   // البيانات
   const [cars, setCars] = useState<Car[]>([]);
+  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
   const [myCars, setMyCars] = useState<Car[]>([]);
   const [favoriteCars, setFavoriteCars] = useState<Car[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
@@ -16,7 +18,7 @@ export const CarList = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // قائمة المقارنة (بحد أقصى 3 سيارات)
+  // قائمة المقارنة
   const [compareCars, setCompareCars] = useState<Car[]>([]);
   const [showCompareModal, setShowCompareModal] = useState<boolean>(false);
 
@@ -75,10 +77,9 @@ export const CarList = () => {
   const [newImage, setNewImage] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
-  // 1. جلب بيانات السوق
+  // 1. جلب بيانات السوق العام
   useEffect(() => {
     let isMounted = true;
-
     const loadCars = async () => {
       setLoading(true);
       setError(null);
@@ -94,32 +95,35 @@ export const CarList = () => {
             seller_type: sellerType || undefined,
           },
         });
-        if (isMounted) {
-          setCars(response.data.data);
-        }
+        if (isMounted) setCars(response.data.data);
       } catch (err) {
         console.error(err);
-        if (isMounted) {
-          setError('تعذر الاتصال بالخادم لجلب قائمة السيارات');
-        }
+        if (isMounted) setError('تعذر الاتصال بالخادم لجلب قائمة السيارات');
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
 
-    const timer = setTimeout(() => {
-      void loadCars();
-    }, 300);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-    };
+    const timer = setTimeout(() => { void loadCars(); }, 300);
+    return () => { isMounted = false; clearTimeout(timer); };
   }, [search, transactionType, condition, transmission, fuelType, bodyType, sellerType, refreshTrigger]);
 
-  // 2. جلب بيانات المستخدم
+  // 2. جلب قائمة المعارض المعتمدة
+  useEffect(() => {
+    let isMounted = true;
+    const loadDealers = async () => {
+      try {
+        const response = await api.get('/dealers');
+        if (isMounted) setDealers(response.data.data);
+      } catch (err) {
+        console.error('Error loading dealers:', err);
+      }
+    };
+    void loadDealers();
+    return () => { isMounted = false; };
+  }, [refreshTrigger]);
+
+  // 3. جلب بيانات المستخدم
   useEffect(() => {
     let isMounted = true;
     if (!token) return;
@@ -145,11 +149,19 @@ export const CarList = () => {
     };
 
     void loadUserData();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [token, refreshTrigger]);
+
+  // فتح صفحة معرض محدد
+  const openDealerStorefront = async (dealerId: number) => {
+    try {
+      const res = await api.get(`/dealers/${dealerId}`);
+      setSelectedDealer(res.data.data);
+    } catch (err) {
+      console.error(err);
+      alert('تعذر فتح صفحة المعرض');
+    }
+  };
 
   // تسجيل الدخول
   const handleLogin = async (e: React.FormEvent) => {
@@ -204,9 +216,7 @@ export const CarList = () => {
   // تسجيل الخروج
   const handleLogout = async () => {
     try {
-      if (token) {
-        await api.post('/logout', {}, { headers: { Authorization: `Bearer ${token}` } });
-      }
+      if (token) await api.post('/logout', {}, { headers: { Authorization: `Bearer ${token}` } });
     } catch (err) {
       console.error(err);
     } finally {
@@ -230,13 +240,9 @@ export const CarList = () => {
       return;
     }
     try {
-      const response = await api.post(
-        `/favorites/toggle/${carId}`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-        }
-      );
+      const response = await api.post(`/favorites/toggle/${carId}`, {}, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
       const isFavorited: boolean = response.data.is_favorited;
       if (isFavorited) {
         setFavoriteIds((prev) => [...prev, carId]);
@@ -245,13 +251,11 @@ export const CarList = () => {
       }
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        alert(err.response?.data?.message || err.message);
-      }
+      if (axios.isAxiosError(err)) alert(err.response?.data?.message || err.message);
     }
   };
 
-  // تبديل إضافة/إزالة سيارة من المقارنة
+  // تبديل المقارنة
   const toggleCompare = (car: Car) => {
     if (compareCars.some((c) => c.id === car.id)) {
       setCompareCars((prev) => prev.filter((c) => c.id !== car.id));
@@ -267,10 +271,7 @@ export const CarList = () => {
   // إضافة أو تعديل سيارة
   const handleSaveCar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) {
-      alert('يجب تسجيل الدخول أولاً');
-      return;
-    }
+    if (!token) { alert('يجب تسجيل الدخول أولاً'); return; }
 
     setSubmitting(true);
     const formData = new FormData();
@@ -306,9 +307,7 @@ export const CarList = () => {
       setEditingCarId(null);
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        alert(err.response?.data?.message || 'حدث خطأ أثناء حفظ السيارة');
-      }
+      if (axios.isAxiosError(err)) alert(err.response?.data?.message || 'حدث خطأ أثناء حفظ السيارة');
     } finally {
       setSubmitting(false);
     }
@@ -338,46 +337,31 @@ export const CarList = () => {
     if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذا الإعلان نهائياً؟')) return;
 
     try {
-      await api.delete(`/cars/${carId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.delete(`/cars/${carId}`, { headers: { Authorization: `Bearer ${token}` } });
       alert('تم حذف السيارة بنجاح 🗑️');
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        alert(err.response?.data?.message || 'فشل حذف السيارة');
-      }
+      if (axios.isAxiosError(err)) alert(err.response?.data?.message || 'فشل حذف السيارة');
     }
   };
 
   const handleBookCar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) {
-      alert('يرجى تسجيل الدخول أولاً لتتمكن من إتمام الحجز 🔒');
-      return;
-    }
+    if (!token) { alert('يرجى تسجيل الدخول أولاً لتتمكن من إتمام الحجز 🔒'); return; }
     if (!selectedCar) return;
 
     setBookingLoading(true);
     try {
-      const response = await api.post(
-        '/rentals',
-        {
-          car_id: selectedCar.id,
-          start_date: rentalStart,
-          end_date: rentalEnd,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const response = await api.post('/rentals', {
+        car_id: selectedCar.id,
+        start_date: rentalStart,
+        end_date: rentalEnd,
+      }, { headers: { Authorization: `Bearer ${token}` } });
       alert(response.data.message);
       setSelectedCar(null);
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        alert(err.response?.data?.message || 'تعذر حجز السيارة');
-      }
+      if (axios.isAxiosError(err)) alert(err.response?.data?.message || 'تعذر حجز السيارة');
     } finally {
       setBookingLoading(false);
     }
@@ -386,26 +370,18 @@ export const CarList = () => {
   const handleCancelRental = async (rentalId: number) => {
     if (!token) return;
     if (!window.confirm('هل تريد بالتأكيد إلغاء هذا الحجز؟')) return;
-
     try {
-      await api.post(`/rentals/${rentalId}/cancel`, {}, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.post(`/rentals/${rentalId}/cancel`, {}, { headers: { Authorization: `Bearer ${token}` } });
       alert('تم إلغاء الحجز بنجاح');
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        alert(err.response?.data?.message || 'فشل إلغاء الحجز');
-      }
+      if (axios.isAxiosError(err)) alert(err.response?.data?.message || 'فشل إلغاء الحجز');
     }
   };
 
   const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) {
-      alert('يرجى تسجيل الدخول أولاً لإرسال تقييمك');
-      return;
-    }
+    if (!token) { alert('يرجى تسجيل الدخول أولاً لإرسال تقييمك'); return; }
     if (!selectedCar || !selectedCar.user) return;
 
     setReviewSubmitting(true);
@@ -415,26 +391,30 @@ export const CarList = () => {
         car_id: selectedCar.id,
         rating: reviewRating,
         comment: reviewComment,
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      }, { headers: { Authorization: `Bearer ${token}` } });
       alert(res.data.message);
       setReviewComment('');
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        alert(err.response?.data?.message || 'فشل تسجيل التقييم');
-      }
+      if (axios.isAxiosError(err)) alert(err.response?.data?.message || 'فشل تسجيل التقييم');
     } finally {
       setReviewSubmitting(false);
     }
   };
 
-  const getRoleBadge = (role: string, showroomName?: string) => {
+  const getRoleBadge = (role: string, showroomName?: string, isVerified?: boolean) => {
     switch (role) {
       case 'dealer':
-        return <span style={{ backgroundColor: '#e3f2fd', color: '#0d47a1', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85em', fontWeight: 'bold' }}>🏢 معرض معتمد: {showroomName || 'معرض سيارات'}</span>;
+        return (
+          <span style={{ backgroundColor: '#e3f2fd', color: '#0d47a1', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85em', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            🏢 معرض معتمد: {showroomName || 'معرض سيارات'} {isVerified && '✓'}
+          </span>
+        );
       case 'rental_agency':
-        return <span style={{ backgroundColor: '#f3e5f5', color: '#4a148c', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85em', fontWeight: 'bold' }}>🔑 مكتب تأجير: {showroomName || 'مكتب تأجير'}</span>;
+        return (
+          <span style={{ backgroundColor: '#f3e5f5', color: '#4a148c', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85em', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            🔑 مكتب تأجير: {showroomName || 'مكتب تأجير'} {isVerified && '✓'}
+          </span>
+        );
       case 'admin':
         return <span style={{ backgroundColor: '#ffebee', color: '#b71c1c', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85em', fontWeight: 'bold' }}>🛡️ مدير المنصة</span>;
       default:
@@ -451,7 +431,7 @@ export const CarList = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '1.05em' }}>مرحباً بك، <strong>{user.name}</strong></span>
-              {getRoleBadge(user.role, user.showroom_name)}
+              {getRoleBadge(user.role, user.showroom_name, user.is_verified)}
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
@@ -501,27 +481,33 @@ export const CarList = () => {
       {/* 2. شريط التبويبات (Navigation Tabs) */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <button
-          onClick={() => setActiveTab('market')}
-          style={{ padding: '10px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: activeTab === 'market' ? '#1a73e8' : '#fff', color: activeTab === 'market' ? '#fff' : '#333' }}
+          onClick={() => { setSelectedDealer(null); setActiveTab('market'); }}
+          style={{ padding: '10px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: activeTab === 'market' && !selectedDealer ? '#1a73e8' : '#fff', color: activeTab === 'market' && !selectedDealer ? '#fff' : '#333' }}
         >
           🚗 السوق العام
+        </button>
+        <button
+          onClick={() => { setSelectedDealer(null); setActiveTab('dealers'); }}
+          style={{ padding: '10px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: activeTab === 'dealers' || selectedDealer ? '#1a73e8' : '#fff', color: activeTab === 'dealers' || selectedDealer ? '#fff' : '#333' }}
+        >
+          🏢 معارض السيارات والمكاتب ({dealers.length})
         </button>
         {user && (
           <>
             <button
-              onClick={() => setActiveTab('myCars')}
+              onClick={() => { setSelectedDealer(null); setActiveTab('myCars'); }}
               style={{ padding: '10px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: activeTab === 'myCars' ? '#1a73e8' : '#fff', color: activeTab === 'myCars' ? '#fff' : '#333' }}
             >
               🏢 سياراتي وإدارتها ({myCars.length})
             </button>
             <button
-              onClick={() => setActiveTab('favorites')}
+              onClick={() => { setSelectedDealer(null); setActiveTab('favorites'); }}
               style={{ padding: '10px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: activeTab === 'favorites' ? '#1a73e8' : '#fff', color: activeTab === 'favorites' ? '#fff' : '#333' }}
             >
               ❤️ المفضلة ({favoriteCars.length})
             </button>
             <button
-              onClick={() => setActiveTab('rentals')}
+              onClick={() => { setSelectedDealer(null); setActiveTab('rentals'); }}
               style={{ padding: '10px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: activeTab === 'rentals' ? '#1a73e8' : '#fff', color: activeTab === 'rentals' ? '#fff' : '#333' }}
             >
               📋 حجوزاتي ({myRentals.length})
@@ -530,8 +516,8 @@ export const CarList = () => {
         )}
       </div>
 
-      {/* 3. شريط الفلاتر المتقدمة */}
-      {activeTab === 'market' && (
+      {/* 3. شريط الفلاتر المتقدمة (فقط في السوق العام) */}
+      {activeTab === 'market' && !selectedDealer && (
         <div style={{ backgroundColor: '#fff', padding: '16px', borderRadius: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)', marginBottom: '25px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
             <input type="text" placeholder="🔍 بحث بالاسم، الموديل، المدينة..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }} />
@@ -601,11 +587,93 @@ export const CarList = () => {
       )}
 
       {/* مؤشر التحميل والأخطاء */}
-      {loading && <div style={{ textAlign: 'center', padding: '15px', fontSize: '1.1em' }}>جاري تحديث السيارات... 🚗</div>}
+      {loading && <div style={{ textAlign: 'center', padding: '15px', fontSize: '1.1em' }}>جاري تحميل البيانات... 🚗</div>}
       {error && <div style={{ color: 'red', textAlign: 'center', padding: '10px' }}>{error}</div>}
 
-      {/* 5. عرض محتوى التبويب النشط */}
-      {activeTab === 'rentals' ? (
+      {/* 5. عرض محتوى صفحة المعرض المستقلة (Storefront Page) */}
+      {selectedDealer ? (
+        <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '14px', boxShadow: '0 4px 14px rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #eee', paddingBottom: '18px', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h2 style={{ margin: 0, color: '#1a73e8' }}>🏢 {selectedDealer.showroom_name}</h2>
+                {selectedDealer.is_verified && <span style={{ backgroundColor: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '20px', fontSize: '0.85em', fontWeight: 'bold' }}>معرض موثق ✓</span>}
+              </div>
+              <p style={{ margin: '6px 0 0 0', color: '#666' }}>📍 المدينة: {selectedDealer.city} | 🚗 إجمالي السيارات بالمعرض: {selectedDealer.cars?.length || 0}</p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <div style={{ textAlign: 'center', backgroundColor: '#fffbeb', padding: '8px 14px', borderRadius: '8px', border: '1px solid #fef3c7' }}>
+                <div style={{ fontSize: '1.4em', fontWeight: 'bold', color: '#b45309' }}>⭐ {selectedDealer.average_rating} / 5</div>
+                <small style={{ color: '#92400e' }}>({selectedDealer.total_reviews} تقييم)</small>
+              </div>
+              {selectedDealer.phone && (
+                <a href={`https://wa.me/${selectedDealer.phone}`} target="_blank" rel="noreferrer" style={{ backgroundColor: '#25D366', color: '#fff', padding: '10px 16px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold' }}>واتساب المعرض 💬</a>
+              )}
+              <button onClick={() => setSelectedDealer(null)} style={{ backgroundColor: '#6c757d', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer' }}>الرجوع لكافة المعارض ↩️</button>
+            </div>
+          </div>
+
+          <h3>🚗 أسطول سيارات هذا المعرض ({selectedDealer.cars?.length || 0})</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '18px', marginBottom: '30px' }}>
+            {selectedDealer.cars?.map((car) => (
+              <div key={car.id} style={{ border: '1px solid #eee', borderRadius: '10px', padding: '12px', backgroundColor: '#fbfcfd' }}>
+                {car.image_url ? <img src={`http://127.0.0.1:8000${car.image_url}`} alt={car.model} style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '6px', marginBottom: '8px' }} /> : <div style={{ height: '120px', backgroundColor: '#e9ecef', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2em' }}>🚗</div>}
+                <h4 style={{ margin: '0 0 4px 0', color: '#1a73e8' }}>{car.brand} - {car.model} ({car.year})</h4>
+                <p style={{ margin: '4px 0', fontWeight: 'bold', color: '#16a34a' }}>${car.price}</p>
+                <button onClick={() => setSelectedCar(car)} style={{ width: '100%', backgroundColor: '#007bff', color: '#fff', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', marginTop: '6px' }}>عرض التفاصيل 🔍</button>
+              </div>
+            ))}
+          </div>
+
+          {/* مراجعات وتقييمات العملاء للمعرض */}
+          <h3>⭐ آراء وتقييمات المشترين حول المعرض ({selectedDealer.reviews?.length || 0})</h3>
+          {selectedDealer.reviews?.length === 0 ? <p style={{ color: '#777' }}>لا توجد تقييمات مضافة لهذا المعرض حتى الآن. كن أول من يقيّم!</p> : (
+            <div style={{ display: 'grid', gap: '10px' }}>
+              {selectedDealer.reviews?.map((rev) => (
+                <div key={rev.id} style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <strong>{rev.user?.name || 'مشتري معتمد'}</strong>
+                    <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>{'⭐'.repeat(rev.rating)} ({rev.rating}/5)</span>
+                  </div>
+                  {rev.comment && <p style={{ margin: '6px 0 0 0', color: '#475569' }}>{rev.comment}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : activeTab === 'dealers' ? (
+        /* 6. قائمة دليل كافة المعارض المعتمدة ومكاتب التأجير */
+        <div>
+          <h2>🏢 دليل معارض ومكاتب تأجير السيارات المعتمدة</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+            {dealers.map((d) => (
+              <div key={d.id} style={{ backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '12px', padding: '18px', boxShadow: '0 3px 8px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <h3 style={{ margin: 0, color: '#1a73e8' }}>{d.showroom_name}</h3>
+                    {d.is_verified && <span style={{ backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75em', fontWeight: 'bold' }}>موثق ✓</span>}
+                  </div>
+                  <p style={{ margin: '4px 0', color: '#666' }}>{d.role === 'dealer' ? '🏢 معرض لبيع السيارات' : '🔑 مكتب تأجير سيارات'}</p>
+                  <p style={{ margin: '4px 0', color: '#444' }}>📍 المدينة: {d.city}</p>
+                  <p style={{ margin: '4px 0', color: '#16a34a', fontWeight: 'bold' }}>🚗 السيارات المتوفرة بالمعرض: {d.cars_count}</p>
+                  <div style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: '6px', display: 'inline-block', marginTop: '6px', fontSize: '0.9em', fontWeight: 'bold' }}>
+                    ⭐ {d.average_rating} / 5 ({d.total_reviews} تقييم)
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                  <button onClick={() => openDealerStorefront(d.id)} style={{ flex: 1, backgroundColor: '#007bff', color: '#fff', border: 'none', padding: '9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    زيارة المعرض وتصفح أسطوله 🏢
+                  </button>
+                  {d.phone && (
+                    <a href={`https://wa.me/${d.phone}`} target="_blank" rel="noreferrer" style={{ backgroundColor: '#25D366', color: '#fff', padding: '9px 12px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>💬</a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : activeTab === 'rentals' ? (
         <div>
           <h2>📋 قائمة حجوزاتي</h2>
           {myRentals.length === 0 ? <p>لا توجد لديك أي حجوزات حالية.</p> : (
@@ -626,6 +694,7 @@ export const CarList = () => {
           )}
         </div>
       ) : (
+        /* 7. عرض شبكة بطاقات السيارات (السوق العام / المفضلة / سياراتي) */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '20px' }}>
           {(activeTab === 'myCars' ? myCars : activeTab === 'favorites' ? favoriteCars : cars).map((car) => {
             const isFav = favoriteIds.includes(car.id);
@@ -635,7 +704,6 @@ export const CarList = () => {
             return (
               <div key={car.id} style={{ border: '1px solid #ddd', borderRadius: '12px', padding: '14px', backgroundColor: '#fff', boxShadow: '0 3px 8px rgba(0,0,0,0.06)', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
-                  {/* زر المفضلة */}
                   <button
                     onClick={() => handleToggleFavorite(car.id)}
                     style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(255,255,255,0.85)', border: 'none', borderRadius: '50%', width: '34px', height: '34px', cursor: 'pointer', zIndex: 2, fontSize: '1.2em' }}
@@ -643,16 +711,14 @@ export const CarList = () => {
                     {isFav ? '❤️' : '🤍'}
                   </button>
 
-                  {/* صورة السيارة */}
                   {car.image_url ? (
                     <img src={`http://127.0.0.1:8000${car.image_url}`} alt={car.model} style={{ width: '100%', height: '170px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' }} />
                   ) : (
                     <div style={{ width: '100%', height: '140px', backgroundColor: '#e9ecef', borderRadius: '8px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5em' }}>🚗</div>
                   )}
 
-                  {/* تفاصيل البائع وشارة المعرض */}
                   <div style={{ marginBottom: '8px' }}>
-                    {car.user && getRoleBadge(car.user.role, car.user.showroom_name)}
+                    {car.user && getRoleBadge(car.user.role, car.user.showroom_name, car.user.is_verified)}
                   </div>
 
                   <h3 style={{ margin: '0 0 6px 0', color: '#1a73e8' }}>{car.brand} - {car.model}</h3>
@@ -679,7 +745,6 @@ export const CarList = () => {
                     )}
                   </div>
 
-                  {/* شبكة المواصفات السريعة بأسلوب mobile.de */}
                   <div style={{ backgroundColor: '#f8f9fa', padding: '8px', borderRadius: '6px', fontSize: '0.85em', marginBottom: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                     <span>⚙️ {car.transmission === 'automatic' ? 'أوتوماتيك' : 'عادي'}</span>
                     <span>⛽ {car.fuel_type || 'بنزين'}</span>
@@ -688,7 +753,6 @@ export const CarList = () => {
                   </div>
                 </div>
 
-                {/* أزرار الإجراءات */}
                 <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
                   <button
                     onClick={() => setSelectedCar(car)}
@@ -713,7 +777,6 @@ export const CarList = () => {
                     {isCompared ? '✓ مقارنة' : '⚖️ مقارنة'}
                   </button>
 
-                  {/* أزرار المالك */}
                   {isOwner && (
                     <>
                       <button onClick={() => startEditCar(car)} style={{ backgroundColor: '#ffc107', border: 'none', padding: '8px 10px', borderRadius: '6px', cursor: 'pointer' }} title="تعديل">✏️</button>
@@ -727,7 +790,7 @@ export const CarList = () => {
         </div>
       )}
 
-      {/* 6. شريط المقارنة العائم في أسفل الشاشة (Floating Comparison Bar) */}
+      {/* 8. شريط المقارنة العائم في أسفل الشاشة */}
       {compareCars.length > 0 && (
         <div
           style={{
@@ -763,27 +826,20 @@ export const CarList = () => {
           </button>
           <button
             onClick={() => setCompareCars([])}
-            style={{
-              backgroundColor: 'transparent',
-              color: '#94a3b8',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '1.2em',
-            }}
-            title="تفريغ المقارنة"
+            style={{ backgroundColor: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer', fontSize: '1.2em' }}
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* 7. نافذة جدول المقارنة جنباً إلى جنب (Side-by-Side Comparison Modal) */}
+      {/* 9. نافذة جدول مقارنة السيارات المخصص */}
       {showCompareModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '15px' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '14px', maxWidth: '900px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
             <button onClick={() => setShowCompareModal(false)} style={{ position: 'absolute', top: '15px', left: '15px', background: '#eee', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', fontSize: '1.1em' }}>✕</button>
 
-            <h2 style={{ color: '#1a73e8', marginTop: 0, textAlign: 'center' }}>⚖️ جدول مقارنة السيارات (Vergleich)</h2>
+            <h2 style={{ color: '#1a73e8', marginTop: 0, textAlign: 'center' }}>⚖️ جدول مقارنة مواصفات السيارات</h2>
 
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '15px', textAlign: 'right' }}>
@@ -858,9 +914,7 @@ export const CarList = () => {
                   <tr>
                     <td style={{ padding: '10px', fontWeight: 'bold' }}>البائع</td>
                     {compareCars.map((car) => (
-                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>
-                        {car.user?.showroom_name || car.user?.name}
-                      </td>
+                      <td key={car.id} style={{ padding: '10px', textAlign: 'center' }}>{car.user?.showroom_name || car.user?.name}</td>
                     ))}
                   </tr>
                 </tbody>
@@ -870,7 +924,7 @@ export const CarList = () => {
         </div>
       )}
 
-      {/* 8. نافذة تفاصيل السيارة المنبثقة الكاملة */}
+      {/* 10. نافذة تفاصيل السيارة المنبثقة الكاملة */}
       {selectedCar && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '14px', maxWidth: '750px', width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: '24px', position: 'relative' }}>
@@ -905,19 +959,13 @@ export const CarList = () => {
               <div style={{ backgroundColor: '#e3f2fd', padding: '14px', borderRadius: '8px', marginBottom: '15px' }}>
                 <h4>معلومات البائع:</h4>
                 <p style={{ margin: '4px 0' }}><strong>الاسم / المعرض:</strong> {selectedCar.user.showroom_name || selectedCar.user.name}</p>
-                {selectedCar.user.phone && (
-                  <p style={{ margin: '4px 0' }}><strong>رقم الهاتف:</strong> {selectedCar.user.phone}</p>
-                )}
+                {selectedCar.user.phone && <p style={{ margin: '4px 0' }}><strong>رقم الهاتف:</strong> {selectedCar.user.phone}</p>}
                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                   {selectedCar.user.phone && (
-                    <a href={`https://wa.me/${selectedCar.user.phone}`} target="_blank" rel="noreferrer" style={{ backgroundColor: '#25D366', color: '#fff', padding: '8px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>
-                      واتساب 💬
-                    </a>
+                    <a href={`https://wa.me/${selectedCar.user.phone}`} target="_blank" rel="noreferrer" style={{ backgroundColor: '#25D366', color: '#fff', padding: '8px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>واتساب 💬</a>
                   )}
                   {selectedCar.user.phone && (
-                    <a href={`tel:${selectedCar.user.phone}`} style={{ backgroundColor: '#007bff', color: '#fff', padding: '8px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>
-                      اتصال 📞
-                    </a>
+                    <a href={`tel:${selectedCar.user.phone}`} style={{ backgroundColor: '#007bff', color: '#fff', padding: '8px 14px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>اتصال 📞</a>
                   )}
                 </div>
               </div>

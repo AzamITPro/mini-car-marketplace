@@ -53,3 +53,31 @@ export interface Rental {
   car?: Car;
   created_at?: string;
 }
+
+export interface ReviewItem {
+  id: number;
+  user_id: number;
+  dealer_id: number;
+  rating: number;
+  comment?: string;
+  created_at: string;
+  user?: {
+    id: number;
+    name: string;
+  };
+}
+
+export interface Dealer {
+  id: number;
+  name: string;
+  showroom_name: string;
+  role: 'dealer' | 'rental_agency' | 'user';
+  phone?: string;
+  city?: string;
+  is_verified?: boolean;
+  cars_count: number;
+  average_rating: number;
+  total_reviews: number;
+  cars?: Car[];
+  reviews?: ReviewItem[];
+}
