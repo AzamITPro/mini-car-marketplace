@@ -13,6 +13,7 @@ class Car extends Model
         'user_id',
         'brand',
         'model',
+        'vin',
         'year',
         'price',
         'transaction_type',
@@ -20,21 +21,30 @@ class Car extends Model
         'city',
         'condition',
         'mileage',
+        'owners_count',
+        'is_accident_free',
+        'has_service_history',
+        'warranty_months',
+        'tuv_valid_until',
         'transmission',
         'fuel_type',
         'engine_power',
         'body_type',
+        'features',
         'status',
         'image_url',
         'is_available',
     ];
 
-    // إرفاق تقييم السعر تلقائياً مع كائن الـ JSON القادم للـ API
+    protected $casts = [
+        'features'            => 'array',
+        'is_accident_free'    => 'boolean',
+        'has_service_history' => 'boolean',
+        'is_available'        => 'boolean',
+    ];
+
     protected $appends = ['price_rating'];
 
-    /**
-     * خوارزمية تقييم السعر العادل ومقارنته بالسوق
-     */
     public function getPriceRatingAttribute()
     {
         $avgPrice = self::where('brand', $this->brand)

@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CarController;
 use App\Http\Controllers\Api\DealerController;
+use App\Http\Controllers\Api\DealerVerificationController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\RentalController;
 use App\Http\Controllers\Api\ReviewController;
@@ -22,7 +23,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/cars', [CarController::class, 'index']);
 Route::get('/cars/{id}', [CarController::class, 'show']);
 
-// مسارات المعارض العامة والتقييمات
+// مسارات المعارض والتقييمات
 Route::get('/dealers', [DealerController::class, 'index']);
 Route::get('/dealers/{id}', [DealerController::class, 'show']);
 Route::get('/dealers/{dealerId}/reviews', [ReviewController::class, 'index']);
@@ -49,4 +50,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // مسار إضافة تقييم بالنجوم
     Route::post('/reviews', [ReviewController::class, 'store']);
+
+    // مسارات توثيق واعتماد المعارض
+    Route::post('/dealer/verify/apply', [DealerVerificationController::class, 'apply']);
+    Route::get('/dealer/verify/status', [DealerVerificationController::class, 'myStatus']);
+
+    // مسارات الإدارة لاعتماد المعارض
+    Route::get('/admin/verifications', [DealerVerificationController::class, 'adminIndex']);
+    Route::post('/admin/verifications/{id}/approve', [DealerVerificationController::class, 'adminApprove']);
+    Route::post('/admin/verifications/{id}/reject', [DealerVerificationController::class, 'adminReject']);
 });

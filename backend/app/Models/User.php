@@ -57,4 +57,11 @@ class User extends Authenticatable
     {
         return $this->hasMany(Review::class, 'dealer_id');
     }
+    /**
+     * Verification documents submitted by this dealer.
+     */
+    public function verification()
+    {
+        return $this->hasOne(DealerVerification::class);
+    }
 }
